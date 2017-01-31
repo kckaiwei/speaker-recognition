@@ -9,6 +9,7 @@ import sys
 import glob
 import os
 import itertools
+import datetime
 import scipy.io.wavfile as wavfile
 
 sys.path.append(os.path.join(
@@ -73,12 +74,81 @@ def task_enroll(input_dirs, output_model):
     m.train()
     m.dump(output_model)
 
+
 def task_predict(input_files, input_model):
     m = ModelInterface.load(input_model)
+    #Counters
+    total = 0.0
+    wrong = 0.0
+    total_confidence = 0.0
+    count = 0
+    wrong_list = []
+    time_start = datetime.datetime.now()
     for f in glob.glob(os.path.expanduser(input_files)):
+        count += 1
+        total += 1
         fs, signal = read_wav(f)
-        label = m.predict(fs, signal)
-        print f, '->', label
+        #remove_silence(fs, signal)
+        #label, confidence, average_confidence = m.predict(fs, signal)
+        label, confidence, average_confidence = m.predict(fs, remove_silence(fs, signal))
+        print label, f
+        if not is_correct(label, f):
+            wrong +=1
+            wrong_list.append(label + ": " + str(f))
+            did_gain = "-"
+            #if str(label) in output:
+            #    output[str(label)].append(str(f))
+            #else:
+            #    output[str(label)] = [str(f)]
+        else:
+            did_gain = "+"
+        total_confidence = total_confidence + confidence
+        #print "Current confidence: ", (100-confidence)
+        #print "Average confidence: ", average_confidence
+        print "Accuracy:", (total-wrong)/total, did_gain
+    #print output
+    #print wrong_list
+    for item in wrong_list:
+        print item
+    print "Operation took: ", (datetime.datetime.now()-time_start)
+
+
+def is_correct(label, f):
+    if str(label[0:4]) in str(f):
+    #if str(label[0:4]) == "1245" or str(label[0:4]) == "1240":
+        return True
+    else:
+        return False
+
+def speech_trim(filename, directory, seg_length):
+    """Detects and splits file into segments with non-silence
+    :type seg_length : length of segment in milliseconds
+    """
+    convo = AudioSegment.from_wav(directory + "/" + str(filename))
+
+    ten_seconds = 10 * 1000
+    sliced = AudioSegment.empty()
+
+    #print silence.detect_silence(convo, min_silence_len=1000, silence_thresh=-35)
+    print convo.rms
+
+    start = 0
+    finish = 0
+
+    #milliseconds padding, so not harsh cutoff
+    silence_padding = 300
+    count = 0
+    for items in silence.detect_silence(convo, min_silence_len=1000, silence_thresh=-30):
+        count += 1
+        print items[0], items[1]
+        finish = items[0]
+        if len(sliced) < seg_length:
+            sliced = sliced + convo[start:finish]
+        else:
+            sliced.export(directory + "/" + str(count) + ".wav", format='wav', bitrate='192k')
+            sliced = AudioSegment.empty()
+            print "Completed part:", count
+        start = items[1]
 
 if __name__ == '__main__':
     global args
